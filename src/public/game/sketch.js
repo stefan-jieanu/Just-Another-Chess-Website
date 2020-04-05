@@ -68,6 +68,70 @@ let sketch = function(p) {
     let isGameOver = false;
     let winnerSide = '';
 
+    // Socket that will be used for multiplayer
+    let gameSocket = io('http://localhost:3000');
+
+    /****************************************************************************************/
+    /*Networking stuff*/
+    gameSocket.on('piece-moved-client', data => {
+        // Check that the move came from the opponent
+        console.log(data);
+        if (playerPieces == pieces.WHITE && data.side == 'black') {
+            // Move the piece
+            let startTile, destTile;
+            for (let i = 0; i < 8; i++) 
+            for (let j = 0; j < 8; j++) {
+                if (board.tiles[i][j].ix == data.start.ix && board.tiles[i][j].iy == data.start.iy)
+                    startTile = board.tiles[i][j];
+                if (board.tiles[i][j].ix == data.dest.ix && board.tiles[i][j].iy == data.dest.iy)
+                    destTile = board.tiles[i][j];
+            }
+
+            board.movePiece(startTile, destTile);
+        }
+        else if (playerPieces == pieces.BLACK && data.side == 'white') {
+            // Move the piece
+            let startTile, destTile;
+            for (let i = 0; i < 8; i++) 
+            for (let j = 0; j < 8; j++) {
+                if (board.tiles[i][j].ix == data.start.ix && board.tiles[i][j].iy == data.start.iy)
+                    startTile = board.tiles[i][j];
+                if (board.tiles[i][j].ix == data.dest.ix && board.tiles[i][j].iy == data.dest.iy)
+                    destTile = board.tiles[i][j];
+            }
+
+            board.movePiece(startTile, destTile);
+        }
+    });
+    // Only temporary.... I think
+    gameSocket.on('change-side-to-black', data => {
+        playerPieces = pieces.BLACK;
+        console.log('black player');
+    });
+
+    // Gets called when a succesful move happened
+    p.succesfulChessMove = function(startTile, destTile) {
+        // Do the network stuff
+        let d = {
+            'start': {
+                'ix': startTile.ix,
+                'iy': startTile.iy
+            },
+            'dest' : {
+                'ix': destTile.ix,
+                'iy': destTile.iy
+            },
+            'side': board.getPieceSideString(destTile)
+        };
+
+        gameSocket.emit('piece-moved-server', d);
+
+        // Switch the sides
+        p.switchSides();
+    }
+
+    /**************************************************/  
+    /*Game stuff*/
     p.preload = function() {
         // Load the image containing the pieces
         piecesSprite = p.loadImage("chess pieces better.png");
@@ -108,7 +172,7 @@ let sketch = function(p) {
     p.mousePressed = function() {
         if (hoveredTile != null) {
             // Make sure the player can only pick up his pieces
-            if (board.getPieceSide(hoveredTile) == playerPieces) {
+            if (board.getPieceSide(hoveredTile) == playerPieces && playerPieces == sideTurn) {
                 hoveredTile.isPickedUp = true;
                 pickedupTile = hoveredTile;
             }
@@ -134,14 +198,11 @@ let sketch = function(p) {
 
     /************************************************************************/
     // Swith the turn and also the side in here for now
-    // When doing multiplayer we will implement this with other things
     p.switchSides = function() {
         if (sideTurn == pieces.BLACK) {
             sideTurn = pieces.WHITE;
-            playerPieces = pieces.WHITE;
         } else if (sideTurn == pieces.WHITE) {
             sideTurn = pieces.BLACK;
-            playerPieces = pieces.BLACK;
         }
     }
 
@@ -516,6 +577,7 @@ let sketch = function(p) {
 
             // Check if the piece is moving to an allowed square
             if (board.getCanPieceMove(startTile, destTile) && destTile != startTile) {
+                /*Just game stuff*/ 
                 // Move the piece
                 initialDestPiece = destTile.piece_type;
                 console.log(initialDestPiece);
@@ -555,7 +617,7 @@ let sketch = function(p) {
                             } else {
                                 /*********************************************/
                                 // Again temporary side switching
-                                p.switchSides();
+                                p.succesfulChessMove(startTile, destTile);
                                 isBlackKingCheck = false;
                             }
                     }
@@ -572,7 +634,7 @@ let sketch = function(p) {
                             } else {
                                 /*********************************************/
                                 // Again temporary side switching
-                                p.switchSides();
+                                p.succesfulChessMove(startTile, destTile);
                                 isWhiteKingCheck = false;
                             }
                     }
@@ -585,7 +647,7 @@ let sketch = function(p) {
                 /************************************************************************/
                 // Swith the turn and also the side in here for now
                 // When doing multiplayer we will implement this with other things
-                p.switchSides();
+                p.succesfulChessMove(startTile, destTile);
                 /************************************************************************/ 
 
                 // Recalcualte attacks for each tile
@@ -822,6 +884,14 @@ let sketch = function(p) {
                 tile.piece_type == pieces.WHITE.BISHOP || tile.piece_type == pieces.WHITE.KNIGHT || tile.piece_type == pieces.WHITE.ROOK)
                 return pieces.WHITE;
             return pieces.EMPTY;
+        }
+
+        // Return the piece side as a string
+        getPieceSideString(tile) {
+            let s = this.getPieceSide(tile);
+            if (s == pieces.WHITE) return 'white';
+            if (s == pieces.BLACK) return 'black';
+            if (s == pieces.EMPTY) return 'empty';
         }
 
         // Get rook moves helper
